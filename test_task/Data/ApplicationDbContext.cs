@@ -16,6 +16,11 @@ namespace test_task.Data
         //набор сущностей ColumnData, для таблицы column_data
         public DbSet<ColumnData> ColumnDatas { get; set; }
 
+        public DbSet<Company> Companies { get; set; }
+        public DbSet<FileType> FileTypes { get; set; }
+        public DbSet<FileData> FileDatas { get; set; }
+
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -25,6 +30,27 @@ namespace test_task.Data
                 .WithOne(cd => cd.ColumnName)//каждая запись ColumnData ссылается на одну ColumnName через навигационное свойство ColumnName
                 .HasForeignKey(cd => cd.ColumnNameId)//указывает, что внешним ключом является свойство ColumnNameId в ColumnData
                 .OnDelete(DeleteBehavior.SetNull);// при удалении записи ColumnName во всех связанных ColumnData вместо каскадного удаления устанавливается ColumnNameId = NULL
+
+            // Связь FileType с Company
+            modelBuilder.Entity<FileType>()
+                .HasOne(ft => ft.Company)
+                .WithMany()
+                .HasForeignKey(ft => ft.CompanyId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Связь FileData с FileType
+            modelBuilder.Entity<FileData>()
+                .HasOne(fd => fd.FileType)
+                .WithMany()
+                .HasForeignKey(fd => fd.FileTypeId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Связь FileData с ColumnData
+            modelBuilder.Entity<FileData>()
+                .HasOne(fd => fd.ColumnData)
+                .WithMany()
+                .HasForeignKey(fd => fd.DataId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

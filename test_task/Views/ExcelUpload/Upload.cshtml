@@ -4,21 +4,64 @@
 
 <h2>Загрузка Excel</h2>
 
-<form asp-action="Upload" asp-controller="ExcelUpload" method="post" enctype="multipart/form-data">
+<form asp-action="Upload" method="post" enctype="multipart/form-data">
     <div class="form-group">
-        <label for="excelFile">Выберите файл .xlsx:</label>
-        <input type="file" name="excelFile" id="excelFile" class="form-control" accept=".xlsx" />
+        <label for="companyId">Компания:</label>
+        <select class="form-control" id="companyId" name="companyId" required>
+            <option value="">-- Выберите компанию --</option>
+            @foreach (var company in ViewBag.Companies)
+            {
+                <option value="@company.Id">@company.Name</option>
+            }
+        </select>
     </div>
-    <br />
-    <button type="submit" class="btn btn-primary">Загрузить и обработать</button>
+
+    <div class="form-group">
+        <label for="fileTypeId">Тип файла:</label>
+        <select class="form-control" id="fileTypeId" name="fileTypeId">
+            <option value="">-- Выберите тип --</option>
+            @if (ViewBag.FileTypes != null)
+            {
+                foreach (var type in ViewBag.FileTypes)
+                {
+                    <option value="@type.Id">@type.Name</option>
+                }
+            }
+        </select>
+        <small class="form-text text-muted">Или введите новый тип:</small>
+        <input type="text" class="form-control mt-2" name="newFileTypeName"
+               placeholder="Новый тип файла" />
+    </div>
+
+    <div class="form-group">
+        <label for="excelFile">Файл Excel:</label>
+        <input type="file" name="excelFile" class="form-control-file" required
+               accept=".xlsx" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Загрузить</button>
 </form>
 
-@if (!ViewData.ModelState.IsValid)
-{
-    <div class="text-danger">
-        @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
-        {
-            <p>@error.ErrorMessage</p>
-        }
-    </div>
+@section Scripts {
+    <script>
+        // Динамическая загрузка типов файлов при выборе компании
+        document.getElementById('companyId').addEventListener('change', function() {
+            const companyId = this.value;
+            if (!companyId) return;
+
+            fetch(`/ExcelUpload/GetFileTypes?companyId=${companyId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const select = document.getElementById('fileTypeId');
+                    select.innerHTML = '<option value="">-- Выберите тип --</option>';
+
+                    data.forEach(fileType => {
+                        const option = document.createElement('option');
+                        option.value = fileType.id;
+                        option.textContent = fileType.name;
+                        select.appendChild(option);
+                    });
+                });
+        });
+    </script>
 }

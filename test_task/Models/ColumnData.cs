@@ -20,5 +20,8 @@ namespace test_task.Models
 
         [ForeignKey("ColumnNameId")] // Внешний ключ 
         public virtual ColumnName ColumnName { get; set; }
+
+        // Обратная ссылка для FileData
+        public virtual ICollection<FileData> FileDatas { get; set; }
     }
 }
