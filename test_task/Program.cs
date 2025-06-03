@@ -25,13 +25,12 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
-
 app.UseAuthorization();
 
+// 1) Меняем маршрут по умолчанию, чтобы корень "/" вызывал ExcelUpload/Upload
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+    pattern: "{controller=ExcelUpload}/{action=Upload}/{id?}");
 
 app.Run();
