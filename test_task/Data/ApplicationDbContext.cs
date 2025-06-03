@@ -10,7 +10,10 @@ namespace test_task.Data
         {
         }
 
+        //набор сущностей ColumnName, который EF Core будет отображать в таблицу column_name
         public DbSet<ColumnName> ColumnNames { get; set; }
+
+        //набор сущностей ColumnData, для таблицы column_data
         public DbSet<ColumnData> ColumnDatas { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -18,10 +21,10 @@ namespace test_task.Data
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.Entity<ColumnName>()
-                .HasMany(cn => cn.ColumnDatas)
-                .WithOne(cd => cd.ColumnName)
-                .HasForeignKey(cd => cd.ColumnNameId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .HasMany(cn => cn.ColumnDatas)//указывает, что ColumnName обладает коллекцией ColumnDatas
+                .WithOne(cd => cd.ColumnName)//каждая запись ColumnData ссылается на одну ColumnName через навигационное свойство ColumnName
+                .HasForeignKey(cd => cd.ColumnNameId)//указывает, что внешним ключом является свойство ColumnNameId в ColumnData
+                .OnDelete(DeleteBehavior.SetNull);// при удалении записи ColumnName во всех связанных ColumnData вместо каскадного удаления устанавливается ColumnNameId = NULL
         }
     }
 }

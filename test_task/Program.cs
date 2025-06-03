@@ -8,21 +8,26 @@ using test_task.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Получаем строку подключения из appsettings.json
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
+// Регистрируем ApplicationDbContext с провайдером Npgsql (PostgreSQL)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+// Добавляем поддержку MVC: контроллеры + представления
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
+// Обработка ошибок и безопасность
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
 
+// Маршрутизация и статические файлы
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
