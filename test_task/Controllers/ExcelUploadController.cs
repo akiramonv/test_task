@@ -14,12 +14,14 @@ namespace test_task.Controllers
     {
         private readonly ApplicationDbContext _context;
 
+        // Конструктор принимает через DI контекст данных для работы с БД
         public ExcelUploadController(ApplicationDbContext context)
         {
             _context = context;
         }
 
         // GET: /ExcelUpload/Upload
+        // Отображает форму загрузки Excel-файла
         [HttpGet]
         public IActionResult Upload()
         {
@@ -27,18 +29,19 @@ namespace test_task.Controllers
         }
 
         // POST: /ExcelUpload/Upload
+        // Обрабатывает загрузку Excel-файла, парсит его и сохраняет содержимое в БД
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Upload(IFormFile excelFile)
         {
-            // 1) Если файл не выбран — вернём ошибку
+            // 1) Если файл не выбран или пустой — вернём ошибку на форму
             if (excelFile == null || excelFile.Length == 0)
             {
                 ModelState.AddModelError("", "Пожалуйста, выберите файл Excel (.xlsx).");
                 return View();
             }
 
-            // 2) Проверим расширение
+            // 2) Проверяем расширение файла — должен быть именно .xlsx
             var ext = Path.GetExtension(excelFile.FileName);
             if (!ext.Equals(".xlsx", System.StringComparison.OrdinalIgnoreCase))
             {
@@ -46,8 +49,8 @@ namespace test_task.Controllers
                 return View();
             }
 
-            // 3) Перед новым импортом — очищаем обе таблицы в БД (column_data → column_name)
-            // Сначала удаляем данные, потом сами колонки. SaveChanges после обеих операций.
+            // 3) Перед новым импортом очищаем все текущие записи из таблиц column_data и column_name
+            // Сначала удаляем «данные ячеек» (column_data)
             var allData = _context.ColumnDatas.ToList();
             if (allData.Any())
             {
@@ -55,6 +58,7 @@ namespace test_task.Controllers
                 await _context.SaveChangesAsync();
             }
 
+            // Затем удаляем «имена столбцов» (column_name)
             var allNames = _context.ColumnNames.ToList();
             if (allNames.Any())
             {
@@ -62,9 +66,10 @@ namespace test_task.Controllers
                 await _context.SaveChangesAsync();
             }
 
+            // 4) Устанавливаем лицензию для EPPlus (библиотека для работы с Excel)
             ExcelPackage.License.SetNonCommercialPersonal("Амир");
 
-            // 5) Читаем Excel
+            // 5) Читаем содержимое Excel-файла в память
             using (var stream = new MemoryStream())
             {
                 await excelFile.CopyToAsync(stream);
@@ -72,19 +77,27 @@ namespace test_task.Controllers
 
                 using (var package = new ExcelPackage(stream))
                 {
+                    // Берём первый лист из книги
                     var worksheet = package.Workbook.Worksheets.FirstOrDefault();
                     if (worksheet == null)
                     {
+                        // Если листов нет — возвращаем ошибку
                         ModelState.AddModelError("", "В файле нет рабочих листов.");
                         return View();
                     }
 
-                    // 6) Определяем, какая из строк 1–3 содержит хоть одну непустую ячейку (это headerRow)
+                    // Определяем число колонок и строк на листе
+                    int totalCols = worksheet.Dimension.End.Column;
+                    int totalRows = worksheet.Dimension.End.Row; // для поиска заголовочной строки по всему листу
+
+                    // 6) Ищем первую непустую строку на всём листе — она будет считаться строкой заголовков
                     int headerRow = 0;
-                    for (int row = 1; row <= 3; row++)
+                    for (int row = 1; row <= totalRows; row++)
                     {
                         bool anyNonEmpty = false;
-                        for (int col = 1; col <= worksheet.Dimension.End.Column; col++)
+
+                        // Проверяем каждую ячейку в текущей строке на непустоту
+                        for (int col = 1; col <= totalCols; col++)
                         {
                             if (!string.IsNullOrWhiteSpace(worksheet.Cells[row, col].Text))
                             {
@@ -92,6 +105,8 @@ namespace test_task.Controllers
                                 break;
                             }
                         }
+
+                        // Если нашли непустую строку — сохраняем её номер и выходим из цикла
                         if (anyNonEmpty)
                         {
                             headerRow = row;
@@ -99,16 +114,14 @@ namespace test_task.Controllers
                         }
                     }
 
+                    // Если ни одной непустой строки не обнаружено — возвращаем ошибку
                     if (headerRow == 0)
                     {
-                        ModelState.AddModelError("", "Не удалось найти строку с заголовками в первых трёх строках.");
+                        ModelState.AddModelError("", "Не удалось найти ни одной непустой строки в листе.");
                         return View();
                     }
 
-                    int totalCols = worksheet.Dimension.End.Column;
-                    int totalRows = worksheet.Dimension.End.Row;
-
-                    // 7) Читаем заголовки (каждый непустой столбец в строке headerRow)
+                    // 7) Считываем заголовки из найденной headerRow: каждую непустую ячейку превращаем в ColumnName
                     var columnNames = new List<ColumnName>();
                     for (int col = 1; col <= totalCols; col++)
                     {
@@ -119,11 +132,11 @@ namespace test_task.Controllers
                         columnNames.Add(new ColumnName { Name = headerText });
                     }
 
-                    // Сохраняем заголовки в БД (table: column_name)
+                    // Сохраняем все найденные названия столбцов в БД, чтобы у каждого появился свой Id
                     await _context.ColumnNames.AddRangeAsync(columnNames);
                     await _context.SaveChangesAsync();
 
-                    // 8) Делаем словарь: номер столбца в Excel → объект ColumnName (с уже проставленным Id)
+                    // 8) Строим словарь: ключ — номер колонки (1-based), значение — объект ColumnName с заполненным Id
                     var colIndexToNameEntity = new Dictionary<int, ColumnName>();
                     int idx = 0;
                     for (int col = 1; col <= totalCols; col++)
@@ -132,15 +145,17 @@ namespace test_task.Controllers
                         if (string.IsNullOrWhiteSpace(headerText))
                             continue;
 
+                        // Позиция idx соответствует порядку добавления в columnNames
                         colIndexToNameEntity[col] = columnNames[idx++];
                     }
 
-                    // 9) Читаем все ячейки ниже headerRow, относящиеся к «учтённым» столбцам, и сохраняем в column_data
+                    // 9) Считываем все ячейки ниже headerRow, относящиеся к «учтённым» столбцам, и формируем список ColumnData
                     var columnDataList = new List<ColumnData>();
                     for (int row = headerRow + 1; row <= totalRows; row++)
                     {
                         for (int col = 1; col <= totalCols; col++)
                         {
+                            // Пропускаем колонки, которых нет в словаре (то есть с пустым заголовком)
                             if (!colIndexToNameEntity.ContainsKey(col))
                                 continue;
 
@@ -148,6 +163,7 @@ namespace test_task.Controllers
                             if (string.IsNullOrWhiteSpace(cellText))
                                 continue;
 
+                            // Добавляем новую запись ColumnData с текстом ячейки и внешним ключом на ColumnName
                             columnDataList.Add(new ColumnData
                             {
                                 DataText = cellText,
@@ -156,6 +172,7 @@ namespace test_task.Controllers
                         }
                     }
 
+                    // Если есть данные для сохранения, добавляем их в БД
                     if (columnDataList.Any())
                     {
                         await _context.ColumnDatas.AddRangeAsync(columnDataList);
@@ -164,19 +181,20 @@ namespace test_task.Controllers
                 }
             }
 
-            // 10) После успешного импорта — перенаправляем на страничку DisplayTable
+            // 10) После успешного импорта перенаправляем пользователя на страницу DisplayTable
             return RedirectToAction(nameof(DisplayTable));
         }
 
         // GET: /ExcelUpload/DisplayTable
+        // Отображает сохранённые в БД данные в виде HTML-таблицы
         public IActionResult DisplayTable()
         {
-            // 1) Забираем все колонки (column_name) в порядке Id
+            // 1) Получаем из БД все названия столбцов (column_name), отсортированные по Id
             var allColumns = _context.ColumnNames
                                      .OrderBy(cn => cn.Id)
                                      .ToList();
 
-            // 2) Для каждой колонки формируем список её значений (column_data), упорядоченных по Id
+            // 2) Для каждого ColumnName собираем список значений DataText из table column_data
             var dataByColumn = new List<List<string>>();
             foreach (var col in allColumns)
             {
@@ -188,10 +206,12 @@ namespace test_task.Controllers
                 dataByColumn.Add(values);
             }
 
-            // 3) Определяем максимальное число строк среди всех столбцов
+            // 3) Определяем максимальное число строк среди всех списков значений,
+            // чтобы выровнять таблицу по строкам
             int maxRows = dataByColumn.Any() ? dataByColumn.Max(lst => lst.Count) : 0;
 
-            // 4) Строим двумерный список tableRows: в каждой строке по одной ячейке из каждого столбца
+            // 4) Строим двумерный список tableRows, где каждая строка состоит из
+            // одного элемента из каждого столбца (или пустой строки, если данных нет)
             var tableRows = new List<List<string>>();
             for (int i = 0; i < maxRows; i++)
             {
@@ -199,11 +219,13 @@ namespace test_task.Controllers
                 for (int colIdx = 0; colIdx < allColumns.Count; colIdx++)
                 {
                     var columnList = dataByColumn[colIdx];
+                    // Если в этом столбце меньше элементов, чем i, добавляем пустую ячейку
                     rowValues.Add(i < columnList.Count ? columnList[i] : string.Empty);
                 }
                 tableRows.Add(rowValues);
             }
 
+            // Формируем ViewModel для передачи в представление
             var vm = new DisplayTableViewModel
             {
                 ColumnNames = allColumns.Select(cn => cn.Name).ToList(),
@@ -217,7 +239,10 @@ namespace test_task.Controllers
     // Модель представления для страницы DisplayTable
     public class DisplayTableViewModel
     {
+        // Список заголовков столбцов
         public List<string> ColumnNames { get; set; }
+
+        // Двумерный список строк: каждая внутренняя List<string> соответствует одной строке HTML-таблицы
         public List<List<string>> TableRows { get; set; }
     }
 }
