@@ -81,10 +81,17 @@ namespace test_task.Controllers
                     var worksheet = package.Workbook.Worksheets.FirstOrDefault();
                     if (worksheet == null)
                     {
-                        // Если листов нет — возвращаем ошибку
                         ModelState.AddModelError("", "В файле нет рабочих листов.");
                         return View();
                     }
+
+                    // Проверка: лист существует, но он полностью пустой (нет ни одной ячейки)
+                    if (worksheet.Dimension == null)
+                    {
+                        ModelState.AddModelError("", "Лист Excel пуст — нет ни одной заполненной ячейки.");
+                        return View();
+                    }
+
 
                     // Определяем число колонок и строк на листе
                     int totalCols = worksheet.Dimension.End.Column;
