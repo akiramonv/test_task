@@ -1,0 +1,40 @@
+﻿@model test_task.Controllers.DisplayTableViewModel
+
+@{
+    ViewData["Title"] = "Результаты импорта";
+}
+
+<h2>Результаты импорта Excel</h2>
+
+@if (Model.ColumnNames == null || !Model.ColumnNames.Any())
+{
+    <p>Нет данных для отображения.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped">
+            <thead class="table-dark">
+                <tr>
+                    @foreach (var colName in Model.ColumnNames)
+                    {
+                        <th>@colName</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.TableRows)
+                {
+                    <tr>
+                        @for (int i = 0; i < row.Count; i++)
+                        {
+                            <td>@row[i]</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<a asp-action="Upload" class="btn btn-secondary">Загрузить другой файл</a>
